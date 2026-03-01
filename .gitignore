@@ -1,0 +1,30 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Bootimage / OS artifacts
+*.bin
+*.img
+*.iso
+*.elf
+*.o
+
+# QEMU logs / dumps
+*.log
+*.dump
+
+# Editor / OS junk
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
+
+# JetBrains
+.idea/
+
+# Mac / Linux temp
+*.swp
+*.swo
+*~
