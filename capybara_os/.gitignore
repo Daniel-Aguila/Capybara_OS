@@ -10,9 +10,14 @@ Cargo.lock
 *.a
 *.map
 
-bootimage-*.bin
+*.efi
+esp/NvVars
+OVMF_CODE*.fd
+OVMF_VARS*.fd
 
-*.log
+bootimage-*.bin
+)
+*.log)
 *.dump
 
 *.swp
