@@ -4,10 +4,11 @@
 mod kernel_args;
 mod identity_acpi_handler;
 
-use crate::kernel_args::KernelArgs;
+use crate::kernel_args::{KernelArgs, OSMemEntry};
 use crate::identity_acpi_handler::IdentityAcpiHandler;
 use acpi::AcpiTables;
 use acpi::mcfg::PciConfigRegions;
+use uefi::mem::memory_map::MemoryMap;
 use uefi::proto::console::text::{Input};
 use uefi::prelude::*;
 use log::info;
@@ -39,11 +40,21 @@ fn main() -> Status {
     }.unwrap();
 
     let pcie_cfg = PciConfigRegions::new(&acpi_tables).unwrap();
-    let pcie_first_addr = pcie_cfg.physical_address(0,0,0,0).unwrap();
 
-    info!("Populated karg: {:?}", kargs);
+    //walk through all 66356 possible segment groups
+    for segment_group in 0u16..=65535u16{
+       if let Some(addr) = pcie_cfg.physical_address(segment_group, 0, 0, 0) {
+            kargs.set_pcie(addr as *mut core::ffi::c_void);
+            break;
+        }
+    }
+ 
     info!("ACPI Revision: {}", acpi_tables.revision);
-    info!("PCIe(0, 0, 0, 0): {:#018x}", pcie_first_addr);
+    
+    let (mm_ptr, total_entries) = get_mm();
+    kargs.set_memmap(mm_ptr, total_entries);
+    info!("Memory adquired");
+    info!("Kernel Arguments: {:?}", kargs);
 
     uefi::system::with_stdin(|input| {
         let _ = read_keyboard_events(input);
@@ -57,8 +68,39 @@ fn main() -> Status {
 fn read_keyboard_events(input: &mut Input) -> uefi::Result{
         info!("Press a key to continue...");
         input.reset(true)?; 
-
         let mut events = [input.wait_for_key_event().unwrap()];
         boot::wait_for_event(&mut events).discard_errdata()?;
         Ok(())
+}
+
+//get memory map. get the memory map and then allocate the pool. Once allocated read it and parse it.
+fn get_mm() -> (*mut OSMemEntry, usize) {
+    let mm = boot::memory_map(uefi::mem::memory_map::MemoryType::LOADER_DATA).unwrap();
+    let mm_size = mm.len() * core::mem::size_of::<OSMemEntry>(); 
+    let mm_ptr = boot::allocate_pool(uefi::mem::memory_map::MemoryType::LOADER_DATA, mm_size)
+        .unwrap()
+        .as_ptr() as *mut OSMemEntry;
+    
+    let mm_entries = unsafe {
+        core::slice::from_raw_parts_mut::<OSMemEntry>(mm_ptr, mm.len())
+    };
+
+    let mut total_entries = 0;
+    for (idx, entry) in mm.entries().enumerate() {
+        mm_entries[idx] = entry.into();
+        total_entries += 1;
+    };
+    
+    (mm_ptr, total_entries)
+}
+
+impl From<&boot::MemoryDescriptor> for OSMemEntry{
+    fn from(mdesc: &boot::MemoryDescriptor) -> OSMemEntry {
+        OSMemEntry{
+            ty: mdesc.ty,
+            base: mdesc.phys_start as usize,
+            pages: mdesc.page_count as usize,
+            att: mdesc.att,
+        }
+    }
 }
