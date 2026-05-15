@@ -13,7 +13,9 @@ pub struct OSMemEntry{
 #[derive(Copy, Clone, Debug)]
 pub struct KernelArgs {
     acpi_ptr: *const c_void,
-    smbios_ptr: *const c_void, acpi_ver: u8, smbios_ver: u8,
+    smbios_ptr: *const c_void,
+    acpi_ver: u8, 
+    smbios_ver: u8,
     pcie_ptr: *mut c_void,
     memmap_entries: usize,
     memmap_ptr: *mut OSMemEntry,
