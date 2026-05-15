@@ -3,10 +3,10 @@ use uefi::table::cfg::{ConfigTableEntry};
 
 //Memory Mapping structure
 pub struct OSMemEntry{
-    pub ty: uefi::boot::MemoryType,
+    pub ty: uefi::mem::memory_map::MemoryType,
     pub base: usize,
     pub pages: usize,
-    pub att: uefi::boot::MemoryAttribute
+    pub att: uefi::mem::memory_map::MemoryAttribute
 }
 
 //acpi_ptr: acpi physical address, smbios_ptr: smbios physical address, and their versions

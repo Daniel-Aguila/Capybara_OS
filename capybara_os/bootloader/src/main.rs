@@ -51,6 +51,7 @@ fn main() -> Status {
  
     info!("ACPI Revision: {}", acpi_tables.revision);
     
+    //get memory map and load it
     let (mm_ptr, total_entries) = get_mm();
     kargs.set_memmap(mm_ptr, total_entries);
     info!("Memory adquired");
@@ -94,8 +95,8 @@ fn get_mm() -> (*mut OSMemEntry, usize) {
     (mm_ptr, total_entries)
 }
 
-impl From<&boot::MemoryDescriptor> for OSMemEntry{
-    fn from(mdesc: &boot::MemoryDescriptor) -> OSMemEntry {
+impl From<&uefi::mem::memory_map::MemoryDescriptor> for OSMemEntry{
+    fn from(mdesc: &uefi::mem::memory_map::MemoryDescriptor) -> OSMemEntry {
         OSMemEntry{
             ty: mdesc.ty,
             base: mdesc.phys_start as usize,
