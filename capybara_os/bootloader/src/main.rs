@@ -10,13 +10,21 @@ use acpi::AcpiTables;
 use acpi::mcfg::PciConfigRegions;
 use uefi::mem::memory_map::MemoryMap;
 use uefi::proto::console::text::{Input};
-use uefi::prelude::*;
+use uefi::proto::console::gop::{GraphicsOutput, Mode, PixelFormat};
 use log::info;
+use uefi::{ResultExt, boot};
+use uefi::{entry, Status};
+
+const SEGMENT_GROUPS: u16 = 65535;
+const MAX_WIDTH: usize = 1920;
+const MAX_HEIGHT: usize = 1080;
 
 #[entry]
 fn main() -> Status {
     uefi::helpers::init().unwrap();
     let handle = uefi::boot::image_handle();
+    //initialize frame buffer
+
     let revision = uefi::system::uefi_revision();
 
     info!("Image Handle: {:#018x}", handle.as_ptr() as usize);
@@ -41,8 +49,7 @@ fn main() -> Status {
 
     let pcie_cfg = PciConfigRegions::new(&acpi_tables).unwrap();
 
-    //walk through all 66356 possible segment groups
-    for segment_group in 0u16..=65535u16{
+    for segment_group in 0u16..= SEGMENT_GROUPS{
        if let Some(addr) = pcie_cfg.physical_address(segment_group, 0, 0, 0) {
             kargs.set_pcie(addr as *mut core::ffi::c_void);
             break;
@@ -61,14 +68,46 @@ fn main() -> Status {
         let _ = read_keyboard_events(input);
     });
     
+    //initialize init_framebuffer
+    init_framebuffer();
 
     //No error exit
     Status::SUCCESS
 }
 
-fn read_keyboard_events(input: &mut Input) -> uefi::Result{
+//using https://blog.malware.re/2023/11/12/rust-os-part3/index.html as reference
+fn init_framebuffer(){
+    let mut gfx = boot::get_handle_for_protocol::<GraphicsOutput>()
+        .and_then(|op|
+            boot::open_protocol_exclusive::<GraphicsOutput>(op)
+        )
+        .unwrap();
+    let mut cur_mode: Option<Mode> = None; 
+    let mut cur_width: usize = 0;
+    let mut cur_height: usize = 0;
+
+    for (idx, mode) in gfx.modes().enumerate(){
+        let mode_info = mode.info();
+        let mode_pxl_fmt = mode.info().pixel_format();
+
+        if (mode_pxl_fmt != PixelFormat::Rgb && mode_pxl_fmt != PixelFormat::Bgr){
+            continue;
+        }
+
+        let (temp_width, temp_height) = mode_info.resolution();
+        if (temp_width > cur_width && temp_width <= MAX_WIDTH || temp_height > cur_height && temp_height <= MAX_HEIGHT){
+            cur_mode = Some(mode);
+            cur_width = temp_width;
+            cur_height = temp_height;
+        }
+    }
+
+    let _ = gfx.set_mode(&cur_mode.unwrap());
+}
+
+fn read_keyboard_events(input: &mut Input) -> uefi::Result<()>{
         info!("Press a key to continue...");
-        input.reset(true)?; 
+        input.reset(true)?;
         let mut events = [input.wait_for_key_event().unwrap()];
         boot::wait_for_event(&mut events).discard_errdata()?;
         Ok(())
