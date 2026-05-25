@@ -2,6 +2,9 @@
 /target/
 **/*.rs.bk
 Cargo.lock
+esp/
+
+OVMF_VARS.4m.fd
 
 # Bootimage / OS artifacts
 *.bin
