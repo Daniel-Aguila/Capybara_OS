@@ -30,3 +30,4 @@ bootimage-*.bin
 
 .DS_Store
 Thumbs.db
+esp/
