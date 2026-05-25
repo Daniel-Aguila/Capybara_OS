@@ -1,15 +1,39 @@
 use core::ffi::c_void;
-use uefi::table::cfg::{ConfigTableEntry};
+use uefi::{proto::console::gop::{PixelFormat}, table::cfg::ConfigTableEntry};
 
 //Memory Mapping structure
-pub struct OSMemEntry{
+pub struct OSMemEntry {
     pub ty: uefi::mem::memory_map::MemoryType,
     pub base: usize,
     pub pages: usize,
     pub att: uefi::mem::memory_map::MemoryAttribute
 }
 
+//Frame Buffer structure
+#[derive(Copy, Clone, Debug)]
+pub struct FrameBufferInfo {
+    pub ptr: *mut u8,
+    pub height: usize,
+    pub width: usize,
+    pub stride: usize,
+    pub pxl_fmt: PixelFormat,
+}
+
+//Frame Buffer Default
+impl Default for FrameBufferInfo {
+    fn default() -> Self {
+        Self {
+            ptr: 0 as *mut u8,
+            height: 0,
+            width: 0,
+            stride: 0,
+            pxl_fmt: PixelFormat::Rgb,
+        }
+    }
+}
+
 //acpi_ptr: acpi physical address, smbios_ptr: smbios physical address, and their versions
+//fb - frame buffer
 #[derive(Copy, Clone, Debug)]
 pub struct KernelArgs {
     acpi_ptr: *const c_void,
@@ -19,6 +43,7 @@ pub struct KernelArgs {
     pcie_ptr: *mut c_void,
     memmap_entries: usize,
     memmap_ptr: *mut OSMemEntry,
+    fb_info: FrameBufferInfo,
 }
 
 //Default values
@@ -31,11 +56,11 @@ impl Default for KernelArgs {
             smbios_ver: 0,
             pcie_ptr: 0 as *mut c_void,
             memmap_entries: 0,
-            memmap_ptr: core::ptr::null_mut()
+            memmap_ptr: core::ptr::null_mut(),
+            fb_info: FrameBufferInfo::default(),
         }
     }
 }
-
 
 //populate the KernelArgs structure from the CFG table
 impl KernelArgs {
@@ -80,23 +105,31 @@ impl KernelArgs {
         (self.smbios_ptr, self.smbios_ver)
     }
     //set and get PCI Express ECAM pointer
-    pub fn set_pcie(&mut self,ptr: *mut c_void){
+    pub fn set_pcie(&mut self,ptr: *mut c_void) {
         self.pcie_ptr = ptr
     }
-    pub fn get_pcie(&self) -> *mut c_void{
+    pub fn get_pcie(&self) -> *mut c_void {
         self.pcie_ptr
     }
     //set memory mapping pointer and slice size
-    pub fn set_memmap(&mut self, ptr: *mut OSMemEntry, entries: usize){
+    pub fn set_memmap(&mut self, ptr: *mut OSMemEntry, entries: usize) {
         self.memmap_ptr = ptr;
         self.memmap_entries = entries;
     }
     //get memory mapping pointer
-    pub fn get_memmap(&self) -> *mut OSMemEntry{
+    pub fn get_memmap(&self) -> *mut OSMemEntry {
         self.memmap_ptr
     }
     //get memory entries number
     pub fn get_memmap_entries(&self) -> usize {
         self.memmap_entries
+    }
+    //set frame buffer info struct 
+    pub fn set_fb_info(&mut self, fb_info: FrameBufferInfo) {
+        self.fb_info = fb_info 
+    }
+    //get frame buffer info struct
+    pub fn get_fb_info(&self) -> FrameBufferInfo {
+        self.fb_info
     }
 }

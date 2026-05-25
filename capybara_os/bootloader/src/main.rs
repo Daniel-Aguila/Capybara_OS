@@ -3,11 +3,14 @@
 
 mod kernel_args;
 mod identity_acpi_handler;
+mod console;
 
-use crate::kernel_args::{KernelArgs, OSMemEntry};
+use crate::console::Console;
+use crate::kernel_args::{FrameBufferInfo, KernelArgs, OSMemEntry};
 use crate::identity_acpi_handler::IdentityAcpiHandler;
 use acpi::AcpiTables;
 use acpi::mcfg::PciConfigRegions;
+use uefi::boot::ScopedProtocol;
 use uefi::mem::memory_map::MemoryMap;
 use uefi::proto::console::text::{Input};
 use uefi::proto::console::gop::{GraphicsOutput, Mode, PixelFormat};
@@ -69,40 +72,69 @@ fn main() -> Status {
     });
     
     //initialize init_framebuffer
-    init_framebuffer();
+    init_framebuffer(&mut kargs);
+
+    //new console instance
+    let mut console = Console::new_from_uefi_gfx(get_gfx());
+
+    //test the write to Console
+    let _ = console.write_str("Hello from Graphics", 0, 9);
+    
+    uefi::system::with_stdin(|input| {
+        let _ = read_keyboard_events(input);
+    });
 
     //No error exit
     Status::SUCCESS
 }
 
-//using https://blog.malware.re/2023/11/12/rust-os-part3/index.html as reference
-fn init_framebuffer(){
-    let mut gfx = boot::get_handle_for_protocol::<GraphicsOutput>()
+//get graphics output open protocol
+fn get_gfx() -> ScopedProtocol<GraphicsOutput> {
+     boot::get_handle_for_protocol::<GraphicsOutput>()
         .and_then(|op|
-            boot::open_protocol_exclusive::<GraphicsOutput>(op)
-        )
-        .unwrap();
+            boot::open_protocol_exclusive::<GraphicsOutput>(op))
+        .unwrap()
+}
+
+//using https://blog.malware.re/2023/11/12/rust-os-part3/index.html as reference
+fn init_framebuffer(kargs: &mut KernelArgs){
+    let mut gfx = get_gfx();
+
     let mut cur_mode: Option<Mode> = None; 
     let mut cur_width: usize = 0;
     let mut cur_height: usize = 0;
+    let mut cur_stride: usize = 0;
+    let mut cur_mode_pxl_fmt: PixelFormat = PixelFormat::Rgb;
 
-    for (idx, mode) in gfx.modes().enumerate(){
+    for (_, mode) in gfx.modes().enumerate(){
         let mode_info = mode.info();
         let mode_pxl_fmt = mode.info().pixel_format();
 
-        if (mode_pxl_fmt != PixelFormat::Rgb && mode_pxl_fmt != PixelFormat::Bgr){
+        if mode_pxl_fmt != PixelFormat::Rgb && mode_pxl_fmt != PixelFormat::Bgr {
             continue;
         }
 
         let (temp_width, temp_height) = mode_info.resolution();
-        if (temp_width > cur_width && temp_width <= MAX_WIDTH || temp_height > cur_height && temp_height <= MAX_HEIGHT){
+        if temp_width <= MAX_WIDTH && temp_height <= MAX_HEIGHT && (temp_width > cur_width || temp_height > cur_height) {
             cur_mode = Some(mode);
             cur_width = temp_width;
             cur_height = temp_height;
+            cur_stride = mode_info.stride();
+            cur_mode_pxl_fmt = mode_pxl_fmt;
         }
     }
 
-    let _ = gfx.set_mode(&cur_mode.unwrap());
+    gfx.set_mode(&cur_mode.unwrap()).unwrap();
+
+    let fb_info = FrameBufferInfo {
+        pxl_fmt: cur_mode_pxl_fmt,
+        width: cur_width,
+        height: cur_height,
+        stride: cur_stride,
+        ptr: gfx.frame_buffer().as_mut_ptr()
+    };
+
+    kargs.set_fb_info(fb_info);
 }
 
 fn read_keyboard_events(input: &mut Input) -> uefi::Result<()>{

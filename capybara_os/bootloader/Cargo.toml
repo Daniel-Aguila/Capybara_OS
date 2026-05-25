@@ -7,6 +7,7 @@ edition = "2024"
 log = "0.4.29"
 uefi = { version = "0.36.1", features = ["alloc", "global_allocator", "logger", "panic_handler"] }
 acpi= "4"
+embedded-graphics = "0.8.2"
 
 [profile.dev]
 panic = "abort"
